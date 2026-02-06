@@ -45,5 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+    
+    <!-- Permission Keys -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>ต้องการเข้าถึงตำแหน่งเพื่อแสดงรถบัสที่ใกล้ที่สุด</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>ต้องการเข้าถึงตำแหน่งเพื่อแจ้งเตือนเมื่อรถบัสเข้าใกล้</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>ต้องการเข้าถึงตำแหน่งเพื่อแจ้งเตือนเมื่อรถบัสเข้าใกล้</string>
+    
+
 </dict>
 </plist>

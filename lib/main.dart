@@ -25,7 +25,8 @@ void main() async {
 
   // Initialize Global Location Service
   final globalLocationService = GlobalLocationService();
-  await globalLocationService.initialize();
+  // Note: We do NOT await initialize() here to prevent white screen hang.
+  // Initialization is moved to UpBusHomePage.
 
   runApp(
     ChangeNotifierProvider.value(

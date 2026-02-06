@@ -151,11 +151,8 @@ class RoutePlannerService {
 
     debugPrint('Total routes found: ${allResults.length}');
 
-    // เรียงตามจำนวนการเปลี่ยนสายก่อน (น้อยไปมาก) แล้วค่อยตามจำนวนป้าย (รวม Penalty)
+    // [UPDATED] เรียงตามคะแนนรวม (Weighted Score) เพื่อให้เส้นทางต่อรถที่มีประสิทธิภาพชนะเส้นทางวนยาวๆ ได้
     allResults.sort((a, b) {
-      if (a.transferCount != b.transferCount) {
-        return a.transferCount.compareTo(b.transferCount);
-      }
       final aScore = _calculateWeightedScore(a);
       final bScore = _calculateWeightedScore(b);
       return aScore.compareTo(bScore);
@@ -165,6 +162,10 @@ class RoutePlannerService {
     final seen = <String>{};
     final uniqueResults = <RouteResult>[];
     for (final result in allResults) {
+      // Use full route combo as key to allow S1 vs S1-S1 to both appear if different enough
+      // But we generally want to dedup if the *experience* is similar.
+      // If we use S1-S1 vs S1, keys are "S1-S1" and "S1". They are distinct.
+      // So both will appear.
       final key = result.segments.map((s) => s.route.shortName).join('-');
       if (!seen.contains(key)) {
         seen.add(key);
@@ -173,15 +174,25 @@ class RoutePlannerService {
     }
 
     // Return top 3 results
+    // [UPDATED] คืนค่า 3 อันดับแรก (ซึ่งตอนนี้จะรวม S1->S1 ถ้าคะแนนดีกว่า S1 Loop)
     return uniqueResults.take(3).toList();
   }
 
-  /// คำนวณคะแนน (จำนวนป้าย + penalty ถ้ามีการวนรถ)
+  /// คำนวณคะแนน (จำนวนป้าย + penalty ถ้ามีการวนรถ + penalty การต่อรถ)
   static int _calculateWeightedScore(RouteResult result) {
     int penalty = 0;
+
+    // โทษของการวนรถ (Loop)
     for (final seg in result.segments) {
       if (seg.isLoop) penalty += 20; // ให้โทษหนักๆ (20 ป้าย) เพื่อเลี่ยงการวน
     }
+
+    // [NEW] โทษของการต่อรถ (Transfer Penalty)
+    // การต่อรถ 1 ครั้ง เทียบเท่ากับการนั่งรถเพิ่มประมาณ 5 ป้าย (ลดจาก infinity เพื่อให้ชนะ loop ได้)
+    if (result.transferCount > 0) {
+      penalty += (result.transferCount * 5);
+    }
+
     final stops = result.segments.fold<int>(0, (sum, s) => sum + s.stopCount);
     return stops + penalty;
   }
@@ -427,7 +438,8 @@ class RoutePlannerService {
     for (final firstRoute in fromRoutes) {
       final isFirstCircular = _isCircular(firstRoute);
       for (final secondRoute in toRoutes) {
-        if (firstRoute.routeId == secondRoute.routeId) continue;
+        // [UPDATED] Remove this check to allow S1->S1 transfer
+        // if (firstRoute.routeId == secondRoute.routeId) continue;
         final isSecondCircular = _isCircular(secondRoute);
 
         // หาจุดเปลี่ยนสาย (ป้ายที่อยู่ในทั้งสองสาย)
@@ -442,10 +454,12 @@ class RoutePlannerService {
 
         for (final transferStop in transferStops) {
           // [NEW] ป้องกันการต่อรถสายเดิมที่จุดอื่นที่ไม่ใช่ Terminal (PKY หรือ Gate 3)
-          // เช่น ห้าม S1 ต่อ S1 ที่คณะวิทย์
+          // [UPDATED] อนุญาตให้ต่อรถที่ "คณะวิศวะ" (engineering) ได้ด้วย ตามคำแนะนำผู้ใช้
           final isSameRoute = firstRoute.shortName == secondRoute.shortName;
           final isTerminal =
-              transferStop.id == 'pky' || transferStop.id == 'gate3';
+              transferStop.id == 'pky' ||
+              transferStop.id == 'gate3' ||
+              transferStop.id == 'engineering';
 
           if (isSameRoute && !isTerminal) {
             continue;

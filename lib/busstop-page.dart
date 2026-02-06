@@ -159,7 +159,7 @@ class _BusStopPageState extends State<BusStopPage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 4),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
@@ -186,7 +186,7 @@ class _BusStopPageState extends State<BusStopPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
 
                   // --- Search ---
                   Padding(
@@ -268,151 +268,195 @@ class _BusStopPageState extends State<BusStopPage> {
                           ),
                         ),
                         Expanded(
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFF5F5F5), // Lighter grey bg
-                            ),
-                            child: StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('Bus stop')
-                                  .snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasError)
-                                  return const Center(
-                                    child: Text('เกิดข้อผิดพลาด'),
-                                  );
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting)
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                if (!snapshot.hasData ||
-                                    snapshot.data!.docs.isEmpty)
-                                  return const Center(
-                                    child: Text('ไม่พบข้อมูล'),
-                                  );
+                          child: Stack(
+                            children: [
+                              Container(
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF5F5F5), // Lighter grey bg
+                                ),
+                                child: StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('Bus stop')
+                                      .snapshots(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasError)
+                                      return const Center(
+                                        child: Text('เกิดข้อผิดพลาด'),
+                                      );
+                                    if (snapshot.connectionState ==
+                                        ConnectionState.waiting)
+                                      return const Center(
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    if (!snapshot.hasData ||
+                                        snapshot.data!.docs.isEmpty)
+                                      return const Center(
+                                        child: Text('ไม่พบข้อมูล'),
+                                      );
 
-                                var documents = snapshot.data!.docs;
-                                if (_searchQuery.isNotEmpty) {
-                                  documents = documents.where((doc) {
-                                    var data =
-                                        doc.data() as Map<String, dynamic>;
-                                    return (data['name'] ?? '')
-                                        .toLowerCase()
-                                        .contains(_searchQuery.toLowerCase());
-                                  }).toList();
-                                }
+                                    var documents = snapshot.data!.docs;
+                                    if (_searchQuery.isNotEmpty) {
+                                      documents = documents.where((doc) {
+                                        var data =
+                                            doc.data() as Map<String, dynamic>;
+                                        return (data['name'] ?? '')
+                                            .toLowerCase()
+                                            .contains(
+                                              _searchQuery.toLowerCase(),
+                                            );
+                                      }).toList();
+                                    }
 
-                                // [LOGIC] การกรอง:
-                                // 1. ถ้ามีการค้นหา (Search) -> ให้แสดงทุกสายที่ชื่อตรง (ไม่ต้องสนสี)
-                                // 2. ถ้าไม่มีการค้นหา -> กรองตามสายที่เลือก (สีเขียว/แดง/น้ำเงิน)
+                                    // [LOGIC] การกรอง:
+                                    // 1. ถ้ามีการค้นหา (Search) -> ให้แสดงทุกสายที่ชื่อตรง (ไม่ต้องสนสี)
+                                    // 2. ถ้าไม่มีการค้นหา -> กรองตามสายที่เลือก (สีเขียว/แดง/น้ำเงิน)
 
-                                if (_searchQuery.isNotEmpty) {
-                                  // กรณีค้นหา: กรองแค่ชื่ออย่างเดียว (Logic เดิมทำไว้แล้วข้างบน documents = documents.where...)
-                                  // ดังนั้นเรา "ข้าม" การกรอง route_id ไปได้เลย
-                                } else {
-                                  // กรณีไม่ได้ค้นหา: กรองตามสายที่เลือก
-                                  String targetRoute = '';
-                                  switch (_selectedLine) {
-                                    case BusLine.yellow:
-                                      targetRoute = 'S1';
-                                      break;
-                                    case BusLine.red:
-                                      targetRoute = 'S2';
-                                      break;
-                                    case BusLine.blue:
-                                      targetRoute = 'S3';
-                                      break;
-                                  }
-
-                                  if (targetRoute.isNotEmpty) {
-                                    documents = documents.where((doc) {
-                                      var data =
-                                          doc.data() as Map<String, dynamic>;
-                                      var routes = data['route_id'];
-
-                                      if (routes == null) return false;
-
-                                      String target = targetRoute.toUpperCase();
-
-                                      // กรณี 1: เป็น List (เช่น ['S1', 'S2'])
-                                      if (routes is List) {
-                                        return routes.any(
-                                          (e) => e
-                                              .toString()
-                                              .toUpperCase()
-                                              .trim()
-                                              .contains(target),
-                                        );
+                                    if (_searchQuery.isNotEmpty) {
+                                      // กรณีค้นหา: กรองแค่ชื่ออย่างเดียว (Logic เดิมทำไว้แล้วข้างบน documents = documents.where...)
+                                      // ดังนั้นเรา "ข้าม" การกรอง route_id ไปได้เลย
+                                    } else {
+                                      // กรณีไม่ได้ค้นหา: กรองตามสายที่เลือก
+                                      String targetRoute = '';
+                                      switch (_selectedLine) {
+                                        case BusLine.yellow:
+                                          targetRoute = 'S1';
+                                          break;
+                                        case BusLine.red:
+                                          targetRoute = 'S2';
+                                          break;
+                                        case BusLine.blue:
+                                          targetRoute = 'S3';
+                                          break;
                                       }
 
-                                      // กรณี 2: เป็น String (เช่น "S1" หรือ "S1, S2")
-                                      if (routes is String) {
-                                        return routes.toUpperCase().contains(
-                                          target,
-                                        );
+                                      if (targetRoute.isNotEmpty) {
+                                        documents = documents.where((doc) {
+                                          var data =
+                                              doc.data()
+                                                  as Map<String, dynamic>;
+                                          var routes = data['route_id'];
+
+                                          if (routes == null) return false;
+
+                                          String target = targetRoute
+                                              .toUpperCase();
+
+                                          // กรณี 1: เป็น List (เช่น ['S1', 'S2'])
+                                          if (routes is List) {
+                                            return routes.any(
+                                              (e) => e
+                                                  .toString()
+                                                  .toUpperCase()
+                                                  .trim()
+                                                  .contains(target),
+                                            );
+                                          }
+
+                                          // กรณี 2: เป็น String (เช่น "S1" หรือ "S1, S2")
+                                          if (routes is String) {
+                                            return routes
+                                                .toUpperCase()
+                                                .contains(target);
+                                          }
+
+                                          return false;
+                                        }).toList();
                                       }
+                                    }
 
-                                      return false;
-                                    }).toList();
-                                  }
-                                }
+                                    // [LOGIC] Scroll to Target
+                                    if (_shouldScroll &&
+                                        _targetHighlightName != null) {
+                                      // หา index ของป้ายที่ต้องการ
+                                      int targetIndex = documents.indexWhere((
+                                        doc,
+                                      ) {
+                                        var data =
+                                            doc.data() as Map<String, dynamic>;
+                                        return data['name'] ==
+                                            _targetHighlightName;
+                                      });
 
-                                // [LOGIC] Scroll to Target
-                                if (_shouldScroll &&
-                                    _targetHighlightName != null) {
-                                  // หา index ของป้ายที่ต้องการ
-                                  int targetIndex = documents.indexWhere((doc) {
-                                    var data =
-                                        doc.data() as Map<String, dynamic>;
-                                    return data['name'] == _targetHighlightName;
-                                  });
-
-                                  if (targetIndex != -1) {
-                                    // เจอแล้ว! สั่ง scroll
-                                    WidgetsBinding.instance.addPostFrameCallback((
-                                      _,
-                                    ) {
-                                      if (_scrollController.hasClients) {
-                                        // คำนวณความสูงคร่าวๆ (Tile 72 + Divider 1 = ~73)
-                                        _scrollController.jumpTo(
-                                          targetIndex * 75.0,
-                                        );
+                                      if (targetIndex != -1) {
+                                        // เจอแล้ว! สั่ง scroll
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                              if (_scrollController
+                                                  .hasClients) {
+                                                // คำนวณความสูงคร่าวๆ (Tile 72 + Divider 1 = ~73)
+                                                _scrollController.jumpTo(
+                                                  targetIndex * 75.0,
+                                                );
+                                              }
+                                            });
+                                        // reset flag เพื่อไม่ให้ scroll ซ้ำเวลา rebuild
+                                        _shouldScroll = false;
                                       }
-                                    });
-                                    // reset flag เพื่อไม่ให้ scroll ซ้ำเวลา rebuild
-                                    _shouldScroll = false;
-                                  }
-                                }
+                                    }
 
-                                return ListView.builder(
-                                  controller: _scrollController,
-                                  padding: const EdgeInsets.only(
-                                    top: 8,
-                                    bottom: 20,
-                                    left: 16,
-                                    right: 16,
-                                  ),
-                                  itemCount: documents.length,
-                                  itemBuilder: (context, index) {
-                                    var data =
-                                        documents[index].data()
-                                            as Map<String, dynamic>;
+                                    return Scrollbar(
+                                      controller: _scrollController,
+                                      thumbVisibility:
+                                          true, // Show scrollbar always to hint scroll
+                                      thickness: 6,
+                                      radius: const Radius.circular(10),
+                                      child: ListView.builder(
+                                        controller: _scrollController,
+                                        padding: const EdgeInsets.only(
+                                          top: 8,
+                                          bottom:
+                                              60, // Add bottom padding for fade visibility
+                                          left: 16,
+                                          right: 16,
+                                        ),
+                                        itemCount: documents.length,
+                                        itemBuilder: (context, index) {
+                                          var data =
+                                              documents[index].data()
+                                                  as Map<String, dynamic>;
 
-                                    // เช็คว่าเป็นป้ายปัจจุบันหรือไม่
-                                    bool isCurrentStop =
-                                        data['name'] == _targetHighlightName;
+                                          // เช็คว่าเป็นป้ายปัจจุบันหรือไม่
+                                          bool isCurrentStop =
+                                              data['name'] ==
+                                              _targetHighlightName;
 
-                                    return _buildBusStopCard(
-                                      context,
-                                      data,
-                                      documents[index].id,
-                                      isCurrentStop,
+                                          return _buildBusStopCard(
+                                            context,
+                                            data,
+                                            documents[index].id,
+                                            isCurrentStop,
+                                          );
+                                        },
+                                      ),
                                     );
                                   },
-                                );
-                              },
-                            ),
+                                ),
+                              ),
+
+                              // Bottom Fade Gradient
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                height: 40,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          const Color(
+                                            0xFFF5F5F5,
+                                          ).withOpacity(0.0),
+                                          const Color(0xFFF5F5F5),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],

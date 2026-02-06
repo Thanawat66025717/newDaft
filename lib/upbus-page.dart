@@ -171,6 +171,8 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
 
   Future<void> _initializeServices() async {
     await NotificationService.initialize();
+    // Initialize GlobalLocationService here to ensure UI is ready for permission dialogs
+    GlobalLocationService().initialize();
   }
 
   @override

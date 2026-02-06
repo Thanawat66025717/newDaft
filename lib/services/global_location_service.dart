@@ -160,11 +160,17 @@ class GlobalLocationService extends ChangeNotifier {
             accuracy: LocationAccuracy.high,
             distanceFilter: 10,
           ),
-        ).listen((Position position) {
-          _userPosition = LatLng(position.latitude, position.longitude);
-          _updateClosestBus();
-          notifyListeners();
-        });
+        ).listen(
+          (Position position) {
+            _userPosition = LatLng(position.latitude, position.longitude);
+            _updateClosestBus();
+            notifyListeners();
+          },
+          onError: (e) {
+            debugPrint("❌ [GlobalLocationService] Location Stream Error: $e");
+            // Handle error gracefully, maybe disable tracking
+          },
+        );
   }
 
   /// คำนวณรถที่ใกล้ที่สุดและแจ้งเตือน

@@ -33,6 +33,7 @@ class _PlanPageState extends State<PlanPage> {
   List<RouteResult> _routeResults = [];
   int _selectedRouteIndex = 0; // index ของ route ที่เลือก
   bool _isRoutesExpanded = true;
+  bool _isSearchExpanded = true; // State for collapsible input
 
   // เก็บ GeoJSON polylines ของแต่ละสาย
   Map<String, List<LatLng>> _routeGeoJsonPoints = {};
@@ -167,72 +168,13 @@ class _PlanPageState extends State<PlanPage> {
             _buildTopBar(context),
 
             // --- ส่วน Input (เลือกต้นทาง/ปลายทาง) ---
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(15),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  _buildDropdown(
-                    "ต้นทาง (Start)",
-                    Icons.my_location,
-                    Colors.blue,
-                    _selectedSourceId,
-                    (val, name) {
-                      setState(() {
-                        _selectedSourceId = val;
-                        _selectedSourceName = name;
-                      });
-                    },
-                  ),
-                  Container(
-                    height: 12,
-                    padding: const EdgeInsets.only(left: 23),
-                    alignment: Alignment.centerLeft,
-                    child: Container(width: 2, color: Colors.grey.shade300),
-                  ),
-                  _buildDropdown(
-                    "ปลายทาง (Destination)",
-                    Icons.location_on,
-                    Colors.red,
-                    _selectedDestinationId,
-                    (val, name) {
-                      setState(() {
-                        _selectedDestinationId = val;
-                        _selectedDestinationName = name;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 40,
-                    child: ElevatedButton.icon(
-                      onPressed: _onSearchBusRoute,
-                      icon: const Icon(Icons.directions_bus),
-                      label: const Text("แสดงเส้นทางรถบัส"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFCE6BFF),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            AnimatedCrossFade(
+              firstChild: _buildFullSearchInput(),
+              secondChild: _buildCompactSearchHeader(),
+              crossFadeState: _isSearchExpanded
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 300),
             ),
 
             // --- ส่วนแสดงผลลัพธ์เส้นทาง ---
@@ -404,6 +346,11 @@ class _PlanPageState extends State<PlanPage> {
 
     // เพิ่มหมุดต้นทาง/ปลายทาง
     await _addRouteMarkers();
+
+    // Collapse search panel to show map
+    setState(() {
+      _isSearchExpanded = false;
+    });
   }
 
   Future<void> _drawBusRoute(RouteResult result) async {
@@ -690,7 +637,9 @@ class _PlanPageState extends State<PlanPage> {
       case 'pky':
         return nameLower.contains('pky') || nameLower.contains('พีเค');
       case 'namor':
-        return nameLower.contains('หน้ามอ') || nameLower.contains('ม.พะเยา');
+        return nameLower.contains('หน้ามอ') ||
+            nameLower.contains('ม.พะเยา') ||
+            nameLower.contains('หน้ามหาวิทยาลัย');
       case 'engineering':
         return nameLower.contains('วิศว');
       case 'auditorium':
@@ -862,6 +811,38 @@ class _PlanPageState extends State<PlanPage> {
                     color: Colors.grey.shade700,
                   ),
                 ),
+                const SizedBox(width: 8),
+                // [NEW] Recommended Badge for first option
+                if (isRecommended)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.purple,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.thumb_up,
+                          color: Colors.white,
+                          size: 10,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'แนะนำ',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 const Spacer(),
                 if (result.transferCount > 0)
                   Container(
@@ -886,126 +867,121 @@ class _PlanPageState extends State<PlanPage> {
             ),
             const SizedBox(height: 8),
 
-            // Horizontal Layout: Timeline -> TimeNote -> Summary
+            // Horizontal Layout: Timeline + TimeNote (Right)
+            // Horizontal Layout: Timeline only (Full width)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Timeline (Left)
-                Expanded(flex: 6, child: _buildRouteTimeline(result)),
+              children: [Expanded(child: _buildRouteTimeline(result))],
+            ),
 
-                // 2. Time Note (Middle) - ถ้ามี
-                if (result.timeNote != null && result.timeNote!.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: result.timeNote!.toString().contains('⛔')
-                            ? Colors.red.shade50
-                            : (result.timeNote!.toString().contains('✅')
-                                  ? Colors.green.shade50
-                                  : Colors.orange.shade50),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
+            // 2. Time Note (Moved below timeline)
+            if (result.timeNote != null && result.timeNote!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: result.timeNote!.toString().contains('⛔')
+                      ? Colors.red.shade50
+                      : (result.timeNote!.toString().contains('✅')
+                            ? Colors.green.shade50
+                            : Colors.orange.shade50),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: result.timeNote!.toString().contains('⛔')
+                        ? Colors.red.shade200
+                        : (result.timeNote!.toString().contains('✅')
+                              ? Colors.green.shade200
+                              : Colors.orange.shade200),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      result.timeNote!.toString().contains('⛔')
+                          ? '⛔'
+                          : (result.timeNote!.toString().contains('✅')
+                                ? '✅'
+                                : '⚠️'),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        result.timeNote!
+                            .replaceAll('⛔ ', '')
+                            .replaceAll('✅ ', '')
+                            .replaceAll('⚠️ ', ''),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
                           color: result.timeNote!.toString().contains('⛔')
-                              ? Colors.red.shade200
+                              ? Colors.red.shade800
                               : (result.timeNote!.toString().contains('✅')
-                                    ? Colors.green.shade200
-                                    : Colors.orange.shade200),
-                          width: 1,
+                                    ? Colors.green.shade800
+                                    : Colors.orange.shade900),
                         ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            result.timeNote!.toString().contains('⛔')
-                                ? '⛔'
-                                : (result.timeNote!.toString().contains('✅')
-                                      ? '✅'
-                                      : '⚠️'),
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            result.timeNote!
-                                .replaceAll('⛔ ', '')
-                                .replaceAll('✅ ', '')
-                                .replaceAll('⚠️ ', ''),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: result.timeNote!.toString().contains('⛔')
-                                  ? Colors.red.shade800
-                                  : (result.timeNote!.toString().contains('✅')
-                                        ? Colors.green.shade800
-                                        : Colors.orange.shade900),
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+            ],
 
-                // 3. Summary (Right)
-                if (result.message.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Expanded(
-                    flex: 3,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.amber.shade200),
-                      ),
+            // 3. Summary (Moved below timeline)
+            if (result.message.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.amber.shade800,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                size: 14,
-                                color: Colors.amber.shade800,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                "สรุป",
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber.shade900,
-                                ),
-                              ),
-                            ],
+                          Text(
+                            "สรุป",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade900,
+                            ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             result.message,
                             style: TextStyle(
                               color: Colors.black87,
-                              fontSize: 11,
-                              height: 1.2,
+                              fontSize: 12,
+                              height: 1.3,
                             ),
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1013,6 +989,7 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   /// สร้าง Visual Timeline แนวนอน
+  /// สร้าง Visual Timeline แนวตั้ง (Vertical)
   Widget _buildRouteTimeline(RouteResult result) {
     final List<Widget> nodes = [];
 
@@ -1071,13 +1048,50 @@ class _PlanPageState extends State<PlanPage> {
       }
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: nodes),
+    return Stack(
+      children: [
+        // The Scrollable List
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(right: 24), // Add padding for icon
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: nodes,
+          ),
+        ),
+
+        // Visual Indicator (Arrow) if likely to overflow
+        if (result.segments.length > 2)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.white.withOpacity(0.0),
+                    Colors.white.withOpacity(0.8),
+                    Colors.white,
+                  ],
+                ),
+              ),
+              padding: const EdgeInsets.only(left: 16, right: 0),
+              child: Center(
+                child: Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
-  /// เลเยอร์ Node (Start, Transfer, End)
   Widget _buildTimelineNode({
     required String label,
     required String stopName,
@@ -1086,30 +1100,24 @@ class _PlanPageState extends State<PlanPage> {
     required bool isStart,
     required bool isEnd,
   }) {
-    // 1. กำหนดสีและไอคอนตาม State
     Color borderColor;
     Color backgroundColor;
     Widget? icon;
     Color labelColor;
 
     if (isStart) {
-      // Start: แดงทึบ, ไอคอนเป้า
-      borderColor = Colors.redAccent.shade400;
-      backgroundColor = Colors.redAccent.shade400;
+      borderColor = color; // Use route color
+      backgroundColor = color; // Use route color
       icon = const Icon(Icons.gps_fixed, color: Colors.white, size: 16);
-      labelColor = Colors.redAccent.shade700;
+      labelColor = color; // Use route color
     } else if (isEnd) {
-      // End: เขียวทึบ, ไอคอนธง
       borderColor = Colors.green;
       backgroundColor = Colors.green;
       icon = const Icon(Icons.flag, color: Colors.white, size: 14);
       labelColor = Colors.green.shade800;
     } else {
-      // Transfer: วงกลมโปร่ง (Hollow), ขอบสีตามสายถัดไป (หรือสายเดิม)
-      // ตามรูป reference จุดเปลี่ยนเป็นสีเขียวๆ (เหมือน S1)
       borderColor = nextColor ?? color;
       backgroundColor = Colors.white;
-      // ใส่ไอคอน Swap ตามคำขอ (สีตามสายถัดไป)
       icon = Icon(Icons.swap_horiz, color: nextColor ?? color, size: 14);
       labelColor = Colors.grey.shade600;
     }
@@ -1117,7 +1125,6 @@ class _PlanPageState extends State<PlanPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Label (เริ่มต้น/จุดเปลี่ยน/จุดหมาย)
         Text(
           label,
           style: TextStyle(
@@ -1127,17 +1134,15 @@ class _PlanPageState extends State<PlanPage> {
           ),
         ),
         const SizedBox(height: 4),
-
-        // Circle Node
         Container(
-          width: isStart ? 32 : (isEnd ? 32 : 24), // Start/End ใหญ่กว่า
+          width: isStart ? 32 : (isEnd ? 32 : 24),
           height: isStart ? 32 : (isEnd ? 32 : 24),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: backgroundColor,
             border: Border.all(
               color: borderColor,
-              width: isStart || isEnd ? 0 : 3, // Hollow only for transfer
+              width: isStart || isEnd ? 0 : 3,
             ),
             boxShadow: [
               BoxShadow(
@@ -1149,10 +1154,7 @@ class _PlanPageState extends State<PlanPage> {
           ),
           child: Center(child: icon),
         ),
-
         const SizedBox(height: 4),
-
-        // Stop Name
         SizedBox(
           width: 60,
           child: Text(
@@ -1167,28 +1169,24 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  /// เลเยอร์เส้นเชื่อม (Connecting Line)
   Widget _buildTimelineLine({
     required Color color,
     required String routeName,
     required int stopCount,
   }) {
     return SizedBox(
-      width: 60, // ความยาวเส้น
+      width: 60,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 20), // ดันลงมาให้อยู่กึ่งกลาง Node
+          const SizedBox(height: 20),
           Stack(
             alignment: Alignment.center,
             clipBehavior: Clip.none,
             children: [
-              // 1. เส้นหลัก
               Container(height: 4, width: double.infinity, color: color),
-
-              // 2. ป้ายชื่อสาย (Pill Badge) วางทับเส้น
               Positioned(
-                bottom: -2, // ขยับขึ้นลงตามต้องการ
+                bottom: -2,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
@@ -1212,8 +1210,6 @@ class _PlanPageState extends State<PlanPage> {
             ],
           ),
           const SizedBox(height: 14),
-
-          // 3. จำนวนป้าย (ใต้เส้น)
           Text(
             "$stopCount ป้าย",
             style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
@@ -1370,6 +1366,142 @@ class _PlanPageState extends State<PlanPage> {
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- New Helper Widgets for Collapsible Search ---
+
+  Widget _buildFullSearchInput() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 24,
+        vertical: 12,
+      ), // Increased horizontal padding
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _buildDropdown(
+            "ต้นทาง (Start)",
+            Icons.my_location,
+            Colors.blue,
+            _selectedSourceId,
+            (val, name) {
+              setState(() {
+                _selectedSourceId = val;
+                _selectedSourceName = name;
+              });
+            },
+          ),
+          Container(
+            height: 12,
+            padding: const EdgeInsets.only(left: 23),
+            alignment: Alignment.centerLeft,
+            child: Container(width: 2, color: Colors.grey.shade300),
+          ),
+          _buildDropdown(
+            "ปลายทาง (Destination)",
+            Icons.location_on,
+            Colors.red,
+            _selectedDestinationId,
+            (val, name) {
+              setState(() {
+                _selectedDestinationId = val;
+                _selectedDestinationName = name;
+              });
+            },
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: ElevatedButton.icon(
+              onPressed: _onSearchBusRoute,
+              icon: const Icon(Icons.directions_bus),
+              label: const Text("แสดงเส้นทางรถบัส"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFCE6BFF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactSearchHeader() {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _isSearchExpanded = true;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(15),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 5,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.my_location, color: Colors.blue, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _selectedSourceName ?? 'เลือกต้นทาง',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.arrow_forward, color: Colors.grey, size: 18),
+            ),
+            Icon(Icons.location_on, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _selectedDestinationName ?? 'เลือกปลายทาง',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.edit, size: 18, color: Colors.purple),
             ),
           ],
         ),

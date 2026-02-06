@@ -70,7 +70,7 @@ class DefaultFirebaseOptions {
     databaseURL:
         'https://upbus-f5030-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'upbus-f5030.firebasestorage.app',
-    iosBundleId: 'com.example.projectapp',
+    iosBundleId: 'com.yuttapat.upbus',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -81,7 +81,7 @@ class DefaultFirebaseOptions {
     databaseURL:
         'https://upbus-f5030-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'upbus-f5030.firebasestorage.app',
-    iosBundleId: 'com.example.projectapp',
+    iosBundleId: 'com.yuttapat.upbus',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
