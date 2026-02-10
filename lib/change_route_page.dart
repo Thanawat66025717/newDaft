@@ -35,19 +35,9 @@ class _ChangeRoutePageState extends State<ChangeRoutePage> {
       "value": "red",
     },
     {
-      "name": "สายประตูงาม (สีน้ำเงิน)",
+      "name": "สายประตูสาม (สีน้ำเงิน)",
       "color": const Color.fromRGBO(17, 119, 252, 1),
       "value": "blue",
-    },
-    {
-      "name": "รถสำหรับชมงาน (สีเหลือง)",
-      "color": Colors.amber,
-      "value": "yellow",
-    },
-    {
-      "name": "รถสำหรับงานอื่นๆ (สีขาว)",
-      "color": Colors.grey,
-      "value": "white",
     },
   ];
 
