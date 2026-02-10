@@ -40,13 +40,16 @@ class NotificationService {
     return (distanceMeters / speedMs).round();
   }
 
-  /// แปลงเวลาเป็นข้อความที่อ่านง่าย
+  /// แปลงเวลาเป็นข้อความที่อ่านง่าย (รูปแบบนับถอยหลัง)
   static String formatEta(int etaSeconds) {
+    if (etaSeconds <= 0) return 'ถึงแล้ว';
     if (etaSeconds < 60) {
-      return '~$etaSeconds วินาที';
+      return '$etaSeconds วินาที';
     } else {
-      final minutes = (etaSeconds / 60).round();
-      return '~$minutes นาที';
+      final minutes = etaSeconds ~/ 60;
+      final seconds = etaSeconds % 60;
+      if (seconds == 0) return '$minutes นาที';
+      return '$minutes นาที $seconds วินาที';
     }
   }
 

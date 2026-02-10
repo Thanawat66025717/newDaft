@@ -38,7 +38,7 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
   List<Polyline> _displayPolylines = [];
   Polyline? _routeNamorPKY;
   // redundant fields removed
-  static const double _alertDistanceMeters = 250.0;
+  static const double _alertDistanceMeters = 500.0;
   static const LatLng _kUniversity = LatLng(
     19.03011372185138,
     99.89781512200192,
@@ -360,7 +360,8 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
                                             // --- Popup แสดงข้อมูล ---
                                             if (isSelected)
                                               Positioned(
-                                                top: 0,
+                                                bottom:
+                                                    100, // ขยับขึ้นไปด้านบน (สูงกว่า icon)
                                                 child: Container(
                                                   padding: const EdgeInsets.all(
                                                     8,
@@ -420,6 +421,20 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
                                                               FontWeight.bold,
                                                         ), // ใช้สีทำสีข้อความ
                                                       ),
+                                                      if (bus.distanceToUser !=
+                                                          null)
+                                                        Text(
+                                                          "ห่าง ${bus.distanceToUser!.toStringAsFixed(0)} ม. (${NotificationService.formatEta(NotificationService.calculateEtaSeconds(bus.distanceToUser!))})",
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                color: Colors
+                                                                    .black87,
+                                                              ),
+                                                        ),
                                                     ],
                                                   ),
                                                 ),
@@ -870,7 +885,7 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
   void _showNotificationSnackBar(String routeName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('🔔 เปิดการแจ้งเตือน: $routeName (ระยะ 250 เมตร)'),
+        content: Text('🔔 เปิดการแจ้งเตือน: $routeName (ระยะ 500 เมตร)'),
         duration: const Duration(seconds: 2),
         backgroundColor: Colors.green,
       ),
@@ -980,8 +995,17 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
                 ),
                 Text(
                   'ระยะห่าง: ${targetBus.distanceToUser?.toStringAsFixed(0) ?? "N/A"} เมตร',
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                 ),
+                if (targetBus.distanceToUser != null)
+                  Text(
+                    'เวลาประมาณการ: ${NotificationService.formatEta(NotificationService.calculateEtaSeconds(targetBus.distanceToUser!))}',
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
               ],
             ),
           ),
