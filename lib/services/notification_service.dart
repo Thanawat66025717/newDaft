@@ -95,7 +95,7 @@ class NotificationService {
   static Future<void> vibrate() async {
     final hasVibrator = await Vibration.hasVibrator();
     if (hasVibrator == true) {
-      await Vibration.vibrate(duration: 500, amplitude: 128);
+      await Vibration.vibrate(duration: 1000, amplitude: 128);
     }
   }
 

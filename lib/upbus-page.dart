@@ -38,7 +38,6 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
   List<Polyline> _displayPolylines = [];
   Polyline? _routeNamorPKY;
   // redundant fields removed
-  static const double _alertDistanceMeters = 500.0;
   static const LatLng _kUniversity = LatLng(
     19.03011372185138,
     99.89781512200192,
@@ -224,6 +223,37 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
                                   userAgentPackageName: 'com.upbus.app',
                                 ),
                                 PolylineLayer(polylines: _displayPolylines),
+
+                                // --- Destination Flag Marker (ธงปักจุดหมาย) ---
+                                if (locationService.destinationPosition != null)
+                                  MarkerLayer(
+                                    markers: [
+                                      Marker(
+                                        point: locationService
+                                            .destinationPosition!,
+                                        width: 10,
+                                        height: 35,
+                                        alignment: Alignment.topCenter,
+                                        child: const Icon(
+                                          Icons.flag,
+                                          color: Color.fromARGB(
+                                            255,
+                                            2,
+                                            173,
+                                            31,
+                                          ),
+                                          size: 30,
+                                          shadows: [
+                                            Shadow(
+                                              blurRadius: 10,
+                                              color: Colors.black45,
+                                              offset: Offset(2, 2),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
 
                                 // --- Bus Stop Markers (คงเดิม) ---
                                 StreamBuilder(
@@ -746,9 +776,10 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
   Widget _floatingMapIcon({
     required IconData icon,
     required VoidCallback onTap,
+    Color? color,
   }) {
     return Material(
-      color: Colors.white,
+      color: color ?? Colors.white,
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
@@ -757,8 +788,91 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
         child: SizedBox(
           width: 44,
           height: 44,
-          child: Icon(icon, color: Colors.grey.shade800),
+          child: Icon(
+            icon,
+            color: color != null ? Colors.white : Colors.grey.shade800,
+          ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showDestinationSelectionDialog() async {
+    final globalService = context.read<GlobalLocationService>();
+    final stops = globalService.allBusStops;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.flag, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('เลือกปลายทาง'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: stops.isEmpty
+              ? const Center(child: Text("ไม่พบข้อมูลป้าย"))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: stops.length,
+                  itemBuilder: (context, index) {
+                    final stop = stops[index];
+                    final routeId = stop['route_id']?.toString() ?? 'Unknown';
+                    // แปลง route_id เป็นสีเพื่อแสดงผล
+                    Color routeColor = Colors.grey;
+                    if (routeId.toLowerCase().contains('green'))
+                      routeColor = Colors.green;
+                    else if (routeId.toLowerCase().contains('red'))
+                      routeColor = Colors.red;
+                    else if (routeId.toLowerCase().contains('blue'))
+                      routeColor = Colors.blue;
+
+                    final isSelected =
+                        globalService.destinationName == stop['name'];
+
+                    return ListTile(
+                      leading: Icon(Icons.place, color: routeColor),
+                      title: Text(stop['name']),
+                      subtitle: Text("สาย: $routeId"),
+                      trailing: isSelected
+                          ? const Icon(Icons.check, color: Colors.green)
+                          : null,
+                      onTap: () {
+                        // ตั้งค่า destination
+                        globalService.setDestination(stop['name'], routeId);
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("📍 กำหนดปลายทาง: ${stop['name']}"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          if (globalService.destinationName != null)
+            TextButton(
+              onPressed: () {
+                globalService.setDestination(null, null);
+                Navigator.pop(dialogContext);
+              },
+              child: const Text(
+                'ยกเลิกปลาทาง',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('ปิด'),
+          ),
+        ],
       ),
     );
   }
@@ -792,14 +906,30 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _routeSelectionTile(
+              title: 'ระบุปลายทาง (Destination)',
+              subtitle: globalService.destinationName != null
+                  ? 'กำลังไป: ${globalService.destinationName}'
+                  : 'เลือกป้ายที่คุณจะลง เพื่อแจ้งเตือนเฉพาะรถสายที่ผ่าน',
+              color: Colors.redAccent,
+              icon: Icons.flag,
+              isSelected: globalService.destinationName != null,
+              onTap: () {
+                Navigator.pop(dialogContext);
+                _showDestinationSelectionDialog();
+              },
+            ),
+            const Divider(),
+            _routeSelectionTile(
               title: 'รถทุกสาย',
               subtitle: 'แจ้งเตือนเมื่อรถสายใดก็ได้เข้าใกล้',
               color: const Color(0xFF9C27B0),
               icon: Icons.all_inclusive,
               isSelected:
                   globalService.notifyEnabled &&
-                  globalService.selectedNotifyRouteId == null,
+                  globalService.selectedNotifyRouteId == null &&
+                  globalService.destinationName == null,
               onTap: () {
+                globalService.setDestination(null, null); // Clear destination
                 globalService.setNotifyEnabled(true, routeId: null);
                 Navigator.pop(dialogContext);
                 _showNotificationSnackBar('ทุกสาย');
@@ -885,7 +1015,7 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
   void _showNotificationSnackBar(String routeName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('🔔 เปิดการแจ้งเตือน: $routeName (ระยะ 500 เมตร)'),
+        content: Text('🔔 เปิดการแจ้งเตือน: $routeName (ระยะ 250 เมตร)'),
         duration: const Duration(seconds: 2),
         backgroundColor: Colors.green,
       ),
@@ -913,6 +1043,68 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
       }
     }
 
+    // 1. กรณีเลือกปลายทาง (Destination) - แสดงแบบพิเศษ
+    if (locationService.destinationName != null) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue, width: 2),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.flag, color: Colors.blue, size: 28),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "ปลายทาง: ${locationService.destinationName}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (targetBus != null) ...[
+              Row(
+                children: [
+                  const Icon(Icons.directions_bus, color: Colors.black54),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "รถสาย ${targetBus.routeId} กำลังมา (${targetBus.name})",
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'อีก ${targetBus.distanceToUser?.toStringAsFixed(0) ?? "?"} ม. (${NotificationService.formatEta(NotificationService.calculateEtaSeconds(targetBus.distanceToUser ?? 0))})',
+                style: const TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Text(
+                  "กำลังรอรถสายที่ผ่าน...",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // 2. กรณีไม่ได้เลือกปลายทาง - และยังไม่เจอรถ
     if (targetBus == null) {
       final routeInfo = selectedNotifyRouteId != null
           ? BusRoute.fromId(selectedNotifyRouteId)
@@ -952,12 +1144,14 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
       );
     }
 
+    // 3. กรณีไม่ได้เลือกปลายทาง - เจอรถแล้ว (แสดงผลปกติแบบเดิม)
     final routeInfo = BusRoute.fromId(targetBus.routeId);
     final routeColor = routeInfo != null
         ? Color(routeInfo.colorValue)
         : Colors.orange;
     final isNear =
-        (targetBus.distanceToUser ?? double.infinity) <= _alertDistanceMeters;
+        (targetBus.distanceToUser ?? double.infinity) <=
+        500; // Assuming 500 meters for "near"
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

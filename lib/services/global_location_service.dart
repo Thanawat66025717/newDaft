@@ -23,16 +23,22 @@ class GlobalLocationService extends ChangeNotifier {
   List<Map<String, dynamic>> _allBusStops = [];
   bool _notifyEnabled = false;
   String? _selectedNotifyRouteId;
-  bool _hasAlerted = false;
   bool _isInitialized = false;
+
+  // New State for Destination
+  String? _destinationName;
+  String? _destinationRouteId;
+  final Map<String, double> _prevDistToDest =
+      {}; // เก็บระยะห่างจากปลายทางครั้งก่อน
+  final Map<String, int> _lastAlertStage =
+      {}; // เก็บระดับการแจ้งเตือนล่าสุดของแต่ละคัน (0=ยังไม่แจ้ง, 1=5นาที, 2=3นาที, 3=1นาที, 4=ถึงแล้ว)
 
   // Subscriptions
   StreamSubscription? _busSubscription;
   StreamSubscription<Position>? _positionSubscription;
 
   // Constants
-  static const double _alertDistanceMeters =
-      500.0; // แจ้งเตือนเมื่อรถอยู่ห่าง 500m
+  static const double _alertDistanceMeters = 250.0; // ระยะ "มาถึงแล้ว"
   static const double _stopProximityMeters = 50.0;
 
   // Getters
@@ -43,6 +49,8 @@ class GlobalLocationService extends ChangeNotifier {
   bool get notifyEnabled => _notifyEnabled;
   String? get selectedNotifyRouteId => _selectedNotifyRouteId;
   bool get isInitialized => _isInitialized;
+  String? get destinationName => _destinationName;
+  String? get destinationRouteId => _destinationRouteId;
 
   /// เริ่มต้น service (เรียกครั้งเดียวตอน app start)
   Future<void> initialize() async {
@@ -63,11 +71,48 @@ class GlobalLocationService extends ChangeNotifier {
   void setNotifyEnabled(bool enabled, {String? routeId}) {
     _notifyEnabled = enabled;
     _selectedNotifyRouteId = routeId;
-    _hasAlerted = false; // reset เพื่อให้แจ้งเตือนใหม่ได้
+    _lastAlertStage.clear(); // Reset history
     notifyListeners();
     debugPrint(
       "🔔 [GlobalLocationService] Notify enabled: $enabled, routeId: $routeId",
     );
+  }
+
+  /// ตั้งค่าจุดหมายปลายทาง (ถ้า name เป็น null คือยกเลิก)
+  void setDestination(String? name, String? routeId) {
+    _destinationName = name;
+    _destinationRouteId = routeId;
+    _prevDistToDest.clear(); // Reset history
+    _lastAlertStage.clear(); // Reset alert history
+
+    // ถ้ามีการเลือกปลายทาง ให้เปิดแจ้งเตือนอัตโนมัติสำหรับสายนั้น
+    if (name != null && routeId != null) {
+      _notifyEnabled = true;
+      _selectedNotifyRouteId = routeId;
+      debugPrint(
+        "🎯 [GlobalLocationService] Source set to $name (Route: $routeId)",
+      );
+    } else {
+      // ถ้ายกเลิก ก็ไม่ต้องปิด notify แต่ให้เคลียร์ filter
+      _selectedNotifyRouteId = null;
+      debugPrint("❌ [GlobalLocationService] Destination cleared");
+    }
+
+    _updateClosestBus(); // Recalculate immediately
+    notifyListeners();
+  }
+
+  /// คืนค่าพิกัดของจุดหมายปลายทาง (ถ้ามี)
+  LatLng? get destinationPosition {
+    if (_destinationName == null || _allBusStops.isEmpty) return null;
+    try {
+      final stop = _allBusStops.firstWhere(
+        (s) => s['name'] == _destinationName,
+      );
+      return LatLng(stop['lat'], stop['long']);
+    } catch (e) {
+      return null;
+    }
   }
 
   /// ดึงข้อมูลป้ายรถจาก Firestore
@@ -203,38 +248,130 @@ class GlobalLocationService extends ChangeNotifier {
     // แจ้งเตือนถ้าเปิดไว้
     if (_notifyEnabled) {
       Bus? targetBus;
-      if (_selectedNotifyRouteId == null) {
-        targetBus = _closestBus;
-      } else {
+
+      // กรณีมีการเลือกจุดหมาย (Destination Set)
+      if (_destinationName != null &&
+          _destinationRouteId != null &&
+          destinationPosition != null) {
+        final destPos = destinationPosition!;
+
+        // 1. กรองเฉพาะสายที่ถูกต้อง
+        var candidateBuses = busesWithDistance.where((b) {
+          return b.routeId.toLowerCase() == _destinationRouteId!.toLowerCase();
+        }).toList();
+
+        // 2. กรองเฉพาะรถที่ "กำลังเข้าหา" (Approaching)
+        Bus? approachingBus;
+        double minDistance = double.infinity;
+
+        for (var bus in candidateBuses) {
+          // ระยะห่างจากรถถึง "จุดหมายปลายทาง" (ไม่ใช่ถึงตัวเรา)
+          // เพื่อดูว่ามันวิ่งเข้าหาจุดหมายหรือไม่
+          double distToDest = distance.as(
+            LengthUnit.Meter,
+            bus.position,
+            destPos,
+          );
+
+          if (_prevDistToDest.containsKey(bus.id)) {
+            double prevDist = _prevDistToDest[bus.id]!;
+            // ถ้า distance ลดลง หรือเท่าเดิม (รถติด/จอดรับ) -> ถือว่ามาถูกทาง
+            // ถ้า distance เพิ่มขึ้น -> วิ่งหนี -> ไม่เอา
+            if (distToDest <= prevDist) {
+              // เป็นรถที่น่าสนใจ
+              // เลือกคันที่ใกล้ตัวเราที่สุดจากกลุ่มนี้
+              if ((bus.distanceToUser ?? double.infinity) < minDistance) {
+                minDistance = bus.distanceToUser ?? double.infinity;
+                approachingBus = bus;
+              }
+            } else {
+              debugPrint(
+                "🚌 [Skip] Bus ${bus.id} is moving away (Diff: ${distToDest - prevDist}m)",
+              );
+            }
+          } else {
+            // ยังไม่มีประวัติ (เพิ่งเริ่ม) -> เก็บค่าไว้ก่อน แต่ยังไม่ฟันธง (รอรอบหน้า)
+            // หรือจะยอมให้ผ่านไปก่อนก็ได้ในรอบแรก แต่เพื่อให้ชัวร์ รอ update หน้าดีกว่า
+            debugPrint(
+              "⏳ [Wait] Initializing direction allow for bus ${bus.id}",
+            );
+            // Allow first time to prevent delay feeling? Let's allow if close.
+            if ((bus.distanceToUser ?? double.infinity) < minDistance) {
+              minDistance = bus.distanceToUser ?? double.infinity;
+              approachingBus = bus;
+            }
+          }
+
+          // อัพเดตประวัติ
+          _prevDistToDest[bus.id] = distToDest;
+        }
+
+        targetBus = approachingBus;
+      } else if (_selectedNotifyRouteId != null) {
+        // กรณีเลือกสาย แต่ไม่ได้เลือกจุดหมาย
         final filteredBuses = busesWithDistance
             .where((b) => b.routeId == _selectedNotifyRouteId)
             .toList();
         targetBus = filteredBuses.isNotEmpty ? filteredBuses.first : null;
+      } else {
+        // กรณีเลือก "ทุกสาย"
+        targetBus = _closestBus;
       }
 
       if (targetBus != null) {
         final targetDist = targetBus.distanceToUser ?? double.infinity;
-        if (targetDist <= _alertDistanceMeters && !_hasAlerted) {
-          _hasAlerted = true;
-          // คำนวณ ETA (ความเร็วเฉลี่ย 35 km/h)
-          final etaSeconds = NotificationService.calculateEtaSeconds(
-            targetDist,
-          );
-          await NotificationService.alertBusNearby(
-            busName: targetBus.name,
-            distanceMeters: targetDist,
-            etaSeconds: etaSeconds,
-          );
-          debugPrint(
-            "🔔 [GlobalLocationService] Alert sent! Bus: ${targetBus.name}, Distance: ${targetDist.toStringAsFixed(0)}m, ETA: ${etaSeconds}s",
-          );
-        } else if (targetDist > _alertDistanceMeters) {
-          _hasAlerted = false;
+        final etaSeconds = NotificationService.calculateEtaSeconds(targetDist);
+        final busId = targetBus.id;
+        final lastStage = _lastAlertStage[busId] ?? 0;
+
+        // Stage 4: ถึงแล้ว (<= 250m)
+        if (targetDist <= _alertDistanceMeters) {
+          if (lastStage < 4) {
+            _triggerAlert(targetBus, targetDist, etaSeconds, "รถมาถึงแล้ว!");
+            _lastAlertStage[busId] = 4;
+          }
+        }
+        // Stage 3: < 1 นาที (60s)
+        else if (etaSeconds <= 60) {
+          if (lastStage < 3) {
+            _triggerAlert(targetBus, targetDist, etaSeconds, "อีก 1 นาทีจะถึง");
+            _lastAlertStage[busId] = 3;
+          }
+        }
+        // Stage 2: < 3 นาที (180s)
+        else if (etaSeconds <= 180) {
+          if (lastStage < 2) {
+            _triggerAlert(targetBus, targetDist, etaSeconds, "อีก 3 นาทีจะถึง");
+            _lastAlertStage[busId] = 2;
+          }
+        }
+        // Stage 1: < 5 นาที (300s)
+        else if (etaSeconds <= 300) {
+          if (lastStage < 1) {
+            _triggerAlert(targetBus, targetDist, etaSeconds, "อีก 5 นาทีจะถึง");
+            _lastAlertStage[busId] = 1;
+          }
         }
       }
     }
 
     notifyListeners();
+  }
+
+  Future<void> _triggerAlert(
+    Bus bus,
+    double dist,
+    int eta,
+    String msgPrefix,
+  ) async {
+    await NotificationService.alertBusNearby(
+      busName: "${bus.name} ($msgPrefix)",
+      distanceMeters: dist,
+      etaSeconds: eta,
+    );
+    debugPrint(
+      "🔔 Alert: $msgPrefix - ${bus.name} (${dist.toStringAsFixed(0)} m)",
+    );
   }
 
   /// คำนวณหาป้ายที่ใกล้ที่สุด
