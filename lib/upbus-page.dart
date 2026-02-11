@@ -944,8 +944,13 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
                 icon: Icons.directions_bus,
                 isSelected:
                     globalService.notifyEnabled &&
-                    globalService.selectedNotifyRouteId == route.id,
+                    globalService.selectedNotifyRouteId == route.id &&
+                    globalService.destinationName == null,
                 onTap: () {
+                  globalService.setDestination(
+                    null,
+                    null,
+                  ); // ล้างค่าปลายทางถ้าเลือกเป็นสาย
                   globalService.setNotifyEnabled(true, routeId: route.id);
                   Navigator.pop(dialogContext);
                   _showNotificationSnackBar('${route.id} ${route.name}');
@@ -958,11 +963,12 @@ class _UpBusHomePageState extends State<UpBusHomePage> {
           if (globalService.notifyEnabled)
             TextButton.icon(
               onPressed: () {
+                globalService.setDestination(null, null); // ล้างค่าปลายทางด้วย
                 globalService.setNotifyEnabled(false);
                 Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('🔕 ปิดการแจ้งเตือนรถบัสใกล้'),
+                    content: Text('🔕 ปิดการแจ้งเตือนและยกเลิกปลายทาง'),
                     duration: Duration(seconds: 2),
                     backgroundColor: Colors.grey,
                   ),
